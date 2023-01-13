@@ -37,20 +37,19 @@ echo -e '*****************************************************************'
 function main {
 
 	#获取静态ip列表
-	local ipjson=$(aws lightsail --region $REGION get-static-ips)
+	local instances=$(aws lightsail --region $REGION get-instances)
+	#获取vps数量
+    local NUM_VPS=$(echo $instances | jq -r '.instances|length')
 	
-	#获取静态ip数量
-	local NUM_IP=$(echo $ipjson | jq -r '.|length')
-	
-	for (( i = 0 ; i < $NUM_IP ; i++ ))
+	for (( i = 0 ; i < $NUM_VPS ; i++ ))
 	do
 		echo -e '=========================seq '$i' start========================='
 		
 		#获取ip各项信息
-		local OLD_IP=$(echo $ipjson | jq -r '.[]['$i'].ipAddress')
-		local INSTANCE_NAME=$(echo $ipjson | jq -r '.[]['$i'].attachedTo')
-		local STATIC_IP_NAME=$(echo $ipjson | jq -r '.[]['$i'].name')
-		
+		local OLD_IP=$(echo $instances | jq -r '.instances['$i'].publicIpAddress')
+		local INSTANCE_NAME=$(echo $instances | jq -r '.instances['$i'].name')
+		local STATIC_IP_NAME="StaticIp-6"
+
 		echo -e "1. checking vps "$OLD_IP
 		
 		ping -c $PINGTIMES $OLD_IP > temp.$OLD_IP.txt 2>&1
@@ -60,12 +59,13 @@ function main {
 			echo -e "2. this IP is alive, nothing happened"
 		else
 			echo -e "2. this vps is dead, process start"
-			#删除原静态ip
-			aws lightsail --region $REGION release-static-ip --static-ip-name $STATIC_IP_NAME
 			#新建静态ip
-			aws lightsail --region $REGION allocate-static-ip --static-ip-name $STATIC_IP_NAME
+			aws lightsail --region $REGION allocate-static-ip --static-ip-name $STATIC_IP_NAME > /dev/null
 			#绑定静态ip
-			aws lightsail --region $REGION attach-static-ip --static-ip-name $STATIC_IP_NAME --instance-name $INSTANCE_NAME
+			aws lightsail --region $REGION attach-static-ip --static-ip-name $STATIC_IP_NAME --instance-name $INSTANCE_NAME > /dev/null
+			#删除静态ip
+            aws lightsail --region $REGION release-static-ip --static-ip-name $STATIC_IP_NAME > /dev/null
+
 			#获取新ip
 			local instancejson=$(aws lightsail --region $REGION get-instance --instance-name $INSTANCE_NAME)
 			local NEW_IP=$(echo $instancejson | jq -r '.[].publicIpAddress')
